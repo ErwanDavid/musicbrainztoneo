@@ -10,7 +10,7 @@ conn = psycopg2.connect(database = "musicbrainz_db",
                         port = 5432)
 
 neoDriver = Graph("neo4j://localhost:7687")
-BATCH_S = 10000
+BATCH_S = 20000
 
 def splice_array(bigArray, start, step):
     stop = start + step
@@ -36,6 +36,14 @@ def getGroups():
                     left join annotation a2 on aa.annotation = a2.id 
                     where grptype = 2 or grptype = 5 or grptype = 6 
                      group by a.grpid, a.grpname, a.grptype, grp_st, ts.tag""")
+
+def getRelease():
+    return sqlToArr("""select r.id, r.name, barcode, rs."name" as status , l."name"  as langage
+                        from "release" r 
+                        join release_status rs on rs.id = r.status 
+                        join "language" l on l.id  = r."language" 
+                        join artist_credit ac on ac.id = r.artist_credit 
+                        where ac.artist_count  > 1 """)
    
 def getArtists():
     return sqlToArr("""select a.id, a."name", a.sort_name, a.begin_date_year, a."type", a.gender, a."comment", ts.tag , string_agg(a2.text, ',') as annotations from  musicbrainz.artist a  
@@ -46,7 +54,7 @@ def getArtists():
                         group by a.id, a."name", a.sort_name, a.begin_date_year, a."type", a.gender, a."comment", ts.tag
                     """)
 
-def getRelations():
+def getRelationsPART():
     ret_arr = []
     all_rel =  sqlToArr('SELECT distinct x.artistid, x.entity1_credit, x.grpid FROM musicbrainz.v_grp_artist x where x.grpid is not null order by x.artistid')
     for rel in all_rel:
@@ -57,6 +65,24 @@ def getRelations():
         newrel.append(rel[2])
         ret_arr.append(newrel)
     return ret_arr
+
+def getRelationsCOLAB():
+    ret_arr = []
+    all_rel =  sqlToArr("""
+                select distinct acn.artist as artist_id , ac."ref_count", r.id 
+            from artist_credit ac  
+            join artist_credit_name acn  on acn.artist_credit = ac.id 
+            join "release" r on r.artist_credit = ac.id 
+            where ac.artist_count  > 1""")
+    for rel in all_rel:
+        newrel = []
+        newrel.append(rel[0])
+        map = {'refcount' : rel[1]}
+        newrel.append(map)
+        newrel.append(rel[2])
+        ret_arr.append(newrel)
+    return ret_arr
+
 
 def createGroups(ListGrp):
     keys = ["iddb", "name", "type", "year", "style", "annotations"]
@@ -69,6 +95,17 @@ def createGroups(ListGrp):
         tot_len = tot_len - BATCH_S
         create_nodes(neoDriver.auto(), cur_arr, labels={"Band"}, keys=keys)
 
+def createRelease(ListGrp):
+    keys = ["iddb", "name", "barcode", "status", "langage"]
+    tot_len = len(ListGrp)
+    cur_pos = 0
+    while tot_len > 0:
+        cur_arr = splice_array(ListGrp, cur_pos, BATCH_S)
+        print("Batch insert", cur_pos,tot_len)
+        cur_pos = cur_pos + BATCH_S
+        tot_len = tot_len - BATCH_S
+        create_nodes(neoDriver.auto(), cur_arr, labels={"Release"}, keys=keys)
+
 def createArtist(ListArtist):
     keys = ["iddb", "name", "sort_name", "begin_date_year", "type", "gender", "comment", "style", "annotations"]
     tot_len = len(ListArtist)
@@ -80,7 +117,7 @@ def createArtist(ListArtist):
         tot_len = tot_len - BATCH_S
         create_nodes(neoDriver.auto(), cur_arr, labels={"Artist"}, keys=keys)
 
-def createRelation(ListRel):
+def createRelationPART(ListRel):
     tot_len = len(ListRel)
     cur_pos = 0
     rel_batch = int(BATCH_S / 10)
@@ -91,10 +128,23 @@ def createRelation(ListRel):
         tot_len = tot_len - rel_batch
         create_relationships(neoDriver.auto(), cur_arr, "PART", start_node_key=("Artist", "iddb"), end_node_key=("Band", "iddb"))
 
+def createRelationCOLAB (ListRel):
+    tot_len = len(ListRel)
+    cur_pos = 0
+    rel_batch = int(BATCH_S / 10)
+    while tot_len > 0:
+        cur_arr = splice_array(ListRel, cur_pos, rel_batch)
+        print("Batch insert", cur_pos,tot_len)
+        cur_pos = cur_pos + rel_batch
+        tot_len = tot_len - rel_batch
+        create_relationships(neoDriver.auto(), cur_arr, "COLAB", start_node_key=("Band", "iddb"), end_node_key=("Release", "iddb"))
 
-createGroups(getGroups())
-createArtist(getArtists())
-createRelation(getRelations())
+
+#createGroups(getGroups())
+#createArtist(getArtists())
+#createRelease(getRelease())
+#createRelationPART(getRelationsPART())
+createRelationCOLAB(getRelationsCOLAB())
 
 
 
