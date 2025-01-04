@@ -1,13 +1,20 @@
 # Music Brainz to Neo4j
 
-![example01](images/shortest_gojira-metallica.png "How Gojira and Metallica relates ?")
 How Gojira and Metallica relates ?
+![example01](images/metallicaGojira.png "How Gojira and Metallica relates ?")
 
 See other data exploration at the end ! 
 
 ## Goals
-https://musicbrainz.org/ is an open music encyclopedia that collects music metadata and makes it available to the public. The goal of this repo is to make available some of its data into a neo4j database abd then ask typical graph questions (shortest path ,...)
+https://musicbrainz.org/ is an open music encyclopedia that collects music metadata and makes it available to the public. 
+The goal of this repo is to make available some of its data into a neo4j database abd then ask typical graph questions (shortest path ,...) and discover new bands or artists.
 
+Only a part of the database is used : 
+* Artists (single person)
+* Bands (in the same table but having a type = 2)
+* Release and artists_credits especially when multiple artists are credited
+
+See the full details of the database here : https://musicbrainz.org/doc/MusicBrainz_Database/Schema
 
 ## Pre requesites
 
@@ -15,6 +22,7 @@ https://musicbrainz.org/ is an open music encyclopedia that collects music metad
 * Python
 * Git
 * 70 GB (40GB database + few GB for neo4j graph)
+* 16 GB RAM
 
 ### Brainz Docker
 
@@ -62,11 +70,11 @@ docker run -d --env=NEO4J_AUTH=none    --publish=7474:7474 --publish=7687:7687  
 Either you may work on your local machine or using a remote server, the example below will use the 'localhost' as target for services. If you are runing the server on a remote machine, you may set up an *ssh tunnel* to make the services ports reachable locally. eg :
 
 ```bash
-ssh -L 5432:localhost:5432  -L 7687:localhost:7687  -L 7474:localhost:7474  192.168.1.3
+ssh -L 5432:localhost:5432  -L 7687:localhost:7687  -L 7474:localhost:7474  <server IP>
 ```
 
 #### Postgresql
-Use a database browser to chack database access. You can use an equivalent of the following jdbc url : 
+Use a database browser to check database access. You can use an equivalent of the following jdbc url : 
 
 jdbc:postgresql://localhost:5432/musicbrainz_db
 
@@ -93,7 +101,9 @@ pip install psycopg2-binary
 
 ### Neo4j indexes
 
+As we will use initial database IDs for refering to the neo4j objects, they need to be indexed :  
 
+```sql
 CREATE INDEX IDXartiddb
 FOR (n:Artist)
 ON (n.iddb)
@@ -105,121 +115,79 @@ ON (n.iddb)
 CREATE INDEX IDXReliddb
 FOR (n:Release)
 ON (n.iddb)
+```
+
 
 
 ### Runing the code
 
 Note you may clean up the neo4j database first if it has been use for previsou testings 
 
+```sql
 MATCH (n)
 WITH n LIMIT 100000
 DETACH DELETE n
 RETURN count(*);
-
-Once the venv activated, you can run : 
+```
+Once the venv activated, you can run (in my computer it took 3min approx for importing 2.4M objects): 
 
 ```bash
-time python -u ./importMusicbrainzToNeo.py
-SELECT  a.grpid, a.grpname, a.grptype, grp_st,  ts.tag,  string_agg(a2.text, ',') FROM musicbrainz.v_grp_artist a
-                    left join  musicbrainz.v_tag_artist_single ts on a.grpid = ts.artistid
-                    left join artist_annotation aa on a.grpid = aa.artist
-                    left join annotation a2 on aa.annotation = a2.id
-                    where grptype = 2 or grptype = 5 or grptype = 6
-                     group by a.grpid, a.grpname, a.grptype, grp_st, ts.tag
-The number of parts:  171800
-Batch insert 0 171800
-Batch insert 10000 161800
-....
-Batch insert 160000 11800
-Batch insert 170000 1800
-select a.id, a."name", a.sort_name, a.begin_date_year, a."type", a.gender, a."comment", ts.tag , string_agg(a2.text, ',') as annotations from  musicbrainz.artist a
-                        left join  musicbrainz.v_tag_artist_single ts on a.id = ts.artistid
-                        left join artist_annotation aa on  a.id = aa.artist
-                        left join annotation a2 on a2.id  = aa.annotation
-                        where a."type" = 4 or a."type" = 1 or a."type" is null
-                        group by a.id, a."name", a.sort_name, a.begin_date_year, a."type", a.gender, a."comment", ts.tag
-
-The number of parts:  1893896
-Batch insert 0 1893896
-Batch insert 10000 1883896
-....
-Batch insert 1880000 13896
-Batch insert 1890000 3896
-SELECT distinct x.artistid, x.entity1_credit, x.grpid FROM musicbrainz.v_grp_artist x where x.grpid is not null order by x.artistid
-The number of parts:  668822
-Batch insert 0 668822
-Batch insert 1000 667822
-....
-Batch insert 667000 1822
-Batch insert 668000 822
-
-real    1m30,029s
-user    0m13,866s
-sys     0m1,105s
+time python -u ./importMBToNeo.py
+2025-01-03 12:43:47,905 WARNING Config loaded
+2025-01-03 12:43:47,928 WARNING Working on Artist
+2025-01-03 12:43:47,928 INFO SQL select a.id, a.name, a.sort_name, a.begin_date_year, a.type, a.gender, a.comment, ts.tag , string_agg(a2.text, ',') as annotations from  musicbrainz.artist a  left join  musicbrainz.v_tag_artist_single ts on a.id = ts.artistid left join artist_annotation aa on  a.id = aa.artist left join annotation a2 on a2.id  = aa.annotation where a.type = 4 or a.type = 1 or a.type is null group by a.id, a.name, a.sort_name, a.begin_date_year, a.type, a.gender, a.comment, ts.tag
+2025-01-03 12:43:53,674 WARNING Number of objects fetched 1893896
+2025-01-03 12:43:55,191 INFO Batch insert node 0 remaining 1893896
+2025-01-03 12:43:55,912 INFO Batch insert node 20000 remaining 1873896
+..........
+27.53user 2.03system 2:51.45elapsed 17%CPU (0avgtext+0avgdata 1079876maxresident)k
+4232inputs+448outputs (27major+598351minor)pagefaults 0swaps
 
 ```
-### Testing
+### Testing & Playing
 
+Rage Against the Machine to Lady Gaga !
 
+![example01](images/RATM_gaga.png "Rage Against the Machine to Lady Gaga")
 
-MATCH (people:Artist)
-RETURN people
-LIMIT 5
-
-
-MATCH (starrtInEighties:Artist)
-WHERE starrtInEighties.begin_date_year >= 1980 AND starrtInEighties.begin_date_year < 1990
-RETURN starrtInEighties.name as name, starrtInEighties.begin_date_year as begin_date_year
-ORDER BY begin_date_year DESC
-
-MATCH (starrtInEighties:Artist) -[d]-> (p:Band)
-WHERE starrtInEighties.begin_date_year >= 1980 AND starrtInEighties.begin_date_year < 1990
-RETURN starrtInEighties, d, p
-limit 50
-
-
-MATCH (myBand:Band) <-[d]- (p:Artist)
-WHERE myBand.name = 'Gojira'
-RETURN myBand, d, p
-limit 50
-
-
-MATCH (myBand:Band) <-[d]- (p:Artist)
-WHERE myBand.name = 'Ultra Vomit'
-RETURN myBand, d, p
-limit 50
-
-MATCH (myBand:Band) <-[d]- (p:Artist)
-WHERE myBand.name = 'Metallica'
-RETURN myBand, d, p
-limit 50
-
-
-MATCH (metal_band:Band) <-[d]- (p:Artist)
-WHERE  metal_band.style contains 'metal'
-RETURN metal_band, d, p
-limit 500
-
-MATCH (m:Group {name: 'In Flames'})<-[d]-(p:Artist)
-RETURN m,d,p
-
-
-MATCH  (source:Band {name: 'Ultra Vomit'}), (target:Band {name: 'Metallica'}),
-p = shortestPath((source)-[*..15]-(target)) 
+```sql
+MATCH  (source:Band {name: 'Rage Against the Machine'}), (target:Artist {name: 'Lady Gaga'}),
+p = shortestPath((source)-[*..10]-(target)) 
 RETURN p
+```
 
-MATCH  (source:Band {name: 'Dark Tranquillity'}), (target:Band {name: 'In Flames'}),
-p = shortestPath((source)-[*..25]-(target)) 
+Motorhead to Helloween
+
+![example01](images/RATM_Prodigy2.png "Motorhead to Helloween")
+
+```sql
+MATCH  (source:Band {name: 'Helloween'}), (target:Band {name: 'Motörhead'}),
+p = shortestPath((source)-[*..10]-(target)) 
 RETURN p
+```
 
 
-MATCH  (source:Artist {name: 'Madonna'}), (target:Artist {name: 'Elton John'}),
-p = shortestPath((source)-[*..15]-(target)) 
+Pioneers in Industrial Metal (here searched as having an 'electro' style musician in a metal band!)
+
+![example01](images/pioneerIndustrial.png "Pioneers in Industrial Metal")
+
+```sql
+MATCH (metal_band:Band) <-[d]- (electro_art:Artist)
+WHERE  metal_band.style contains 'metal' 
+                and electro_art.style contains 'electro'
+                        and metal_band.year < 1990
+RETURN metal_band, d, electro_art
+limit 50
+```
+
+
+
+Metallica To Justice
+
+![example01](images/MetallicaJustice.png "Pioneers in Industrial Metal")
+
+```sql
+MATCH  (source:Band {name: 'Metallica'}), (target:Band {name: 'Justice'}),
+p = shortestPath((source)-[*..10]-(target)) 
 RETURN p
-
-
-
-## Adding spotify release 
-
--- select count(1) from r_track_artist;  --11 840 402 
--- select count(distinct track_id) from r_track_artist;  -- 8 741 672
+```

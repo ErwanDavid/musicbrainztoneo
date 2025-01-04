@@ -140,10 +140,10 @@ def createRelationCOLAB (ListRel):
         create_relationships(neoDriver.auto(), cur_arr, "COLAB", start_node_key=("Band", "iddb"), end_node_key=("Release", "iddb"))
 
 
-#createGroups(getGroups())
-#createArtist(getArtists())
-#createRelease(getRelease())
-#createRelationPART(getRelationsPART())
+createGroups(getGroups())
+createArtist(getArtists())
+createRelease(getRelease())
+createRelationPART(getRelationsPART())
 createRelationCOLAB(getRelationsCOLAB())
 
 

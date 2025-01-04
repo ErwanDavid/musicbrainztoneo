@@ -1,0 +1,57 @@
+{
+    "PG" : {
+        "database" : "musicbrainz_db", 
+        "user" : "musicbrainz", 
+        "host" :"localhost",
+        "password" : "musicbrainz",
+        "port" : 5432
+    },
+    "Neo4j" : {
+        "url" : "neo4j://localhost:7687",
+        "batch" : 20000
+    },
+    "nodes" : [
+        {
+            "label" : "Artist",
+            "sql" : "select a.id, a.name, a.sort_name, a.begin_date_year, a.type, a.gender, a.comment, ts.tag , string_agg(a2.text, ',') as annotations from  musicbrainz.artist a  left join  musicbrainz.v_tag_artist_single ts on a.id = ts.artistid left join artist_annotation aa on  a.id = aa.artist left join annotation a2 on a2.id  = aa.annotation where a.type = 4 or a.type = 1 or a.type is null group by a.id, a.name, a.sort_name, a.begin_date_year, a.type, a.gender, a.comment, ts.tag",
+            "metadata" : ["iddb", "name", "sort_name", "begin_date_year", "type", "gender", "comment", "style", "annotations"]
+        },
+        {
+            "label" : "Band",
+            "sql" : "SELECT  a.grpid, a.grpname, a.grptype, grp_st,  ts.tag,  string_agg(a2.text, ',') FROM musicbrainz.v_grp_artist a  left join  musicbrainz.v_tag_artist_single ts on a.grpid = ts.artistid   left join artist_annotation aa on a.grpid = aa.artist   left join annotation a2 on aa.annotation = a2.id   where grptype = 2 or grptype = 5 or grptype = 6  group by a.grpid, a.grpname, a.grptype, grp_st, ts.tag",
+            "metadata" : ["iddb", "name", "type", "year", "style", "annotations"]
+        },
+        {
+           "label" : "Release",
+            "sql" : "select r.id, r.name, barcode, rs.name as status , l.name  as langage  from release r join release_status rs on rs.id = r.status  join language l on l.id  = r.language join artist_credit ac on ac.id = r.artist_credit  where ac.artist_count  > 1",
+            "metadata" : ["iddb", "name", "type", "year", "style", "annotations"]
+
+        }
+    ],
+    "relations" : [
+        {
+            "label" : "PartOf",
+            "sql" : "SELECT distinct x.artistid, x.entity1_credit, x.grpid FROM musicbrainz.v_grp_artist x where x.grpid is not null order by x.artistid",
+            "srcNode" : "Artist",
+            "dstNode" : "Band",
+            "srcField" : "iddb",
+            "dstField" : "iddb"
+        },
+        {
+            "label" : "CollaborateTo",
+            "sql" : "select distinct acn.artist as artist_id , ac.ref_count, r.id  from artist_credit ac   join artist_credit_name acn  on acn.artist_credit = ac.id  join release r on r.artist_credit = ac.id  where ac.artist_count  > 1",
+            "srcNode" : "Artist",
+            "dstNode" : "Release",
+            "srcField" : "iddb",
+            "dstField" : "iddb"
+        },
+        {
+            "label" : "CollaborateTo",
+            "sql" : "select distinct acn.artist as artist_id , ac.ref_count, r.id  from artist_credit ac   join artist_credit_name acn  on acn.artist_credit = ac.id  join release r on r.artist_credit = ac.id  where ac.artist_count  > 1",
+            "srcNode" : "Band",
+            "dstNode" : "Release",
+            "srcField" : "iddb",
+            "dstField" : "iddb"
+        }
+    ]
+}
