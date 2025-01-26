@@ -81,6 +81,42 @@ jdbc:postgresql://localhost:5432/musicbrainz_db
 The default password is 'musicbrainz'
 ![database](images/database01.png "Example of the schema in DBeaver")
 
+__Additionnal views__
+
+These views help getting the tags for artists mainly 
+
+````sql
+create view musicbrainz.v_grp_artist as
+select  a.id as artistid,  a.name as  atristname, a.type as artisttype, grp.id as grpid, grp."name" as grpname, grp.type as grptype, a.begin_date_year as art_st, grp.begin_date_year as grp_st, laa.entity0_credit  , laa.entity1_credit  
+from artist a 
+join l_artist_artist laa on a.id = laa.entity0 
+join artist grp on grp.id = laa.entity1
+
+create view musicbrainz.v_tag_artist as
+select a.id as artistid,  a.name as  atristname,t.id as tagid, t."name"  as tag, at2.count,  t.ref_count
+from artist a 
+join artist_tag at2 on a.id = at2.artist 
+join tag t on at2.tag =t.id 
+where t.ref_count > 10000
+order by a.id, at2.count desc
+
+create view musicbrainz.v_tag_artist_single as
+select a.artistid , a.atristname , a.tagid, a.tag
+FROM  musicbrainz.v_tag_artist a
+ JOIN (
+    SELECT artistid, MAX(count) count
+    FROM  musicbrainz.v_tag_artist
+    GROUP BY artistid
+) b ON a.artistid = b.artistid AND a.count = b.count
+  JOIN (
+    SELECT artistid, MAX(ref_count) ref_count
+    FROM  musicbrainz.v_tag_artist
+    GROUP BY artistid, count
+) c ON a.artistid = c.artistid AND a.ref_count = c.ref_count
+order by 1
+````
+
+
 #### Neo4j
 
 Test the access using for example 
@@ -146,7 +182,7 @@ time python -u ./importMBToNeo.py
 ```
 ### Testing & Playing
 
-Rage Against the Machine to Lady Gaga !
+__Rage Against the Machine to Lady Gaga !__
 
 ![example01](images/RATM_gaga.png "Rage Against the Machine to Lady Gaga")
 
@@ -156,7 +192,7 @@ p = shortestPath((source)-[*..10]-(target))
 RETURN p
 ```
 
-Motorhead to Helloween
+__Motorhead to Helloween__
 
 ![example01](images/RATM_Prodigy2.png "Motorhead to Helloween")
 
@@ -167,7 +203,8 @@ RETURN p
 ```
 
 
-Pioneers in Industrial Metal (here searched as having an 'electro' style musician in a metal band!)
+__Pioneers in Industrial Metal__
+ Here searched as having an 'electro' style musician in a metal band!)
 
 ![example01](images/pioneerIndustrial.png "Pioneers in Industrial Metal")
 
@@ -180,11 +217,21 @@ RETURN metal_band, d, electro_art
 limit 50
 ```
 
+__Exploring metal and electronic music band relations__
+
+![example01](images/electroTometal.png "Exploring metal and electronic music band relations")
+
+```sql
+MATCH (metal_band:Band),  (electro_art:Band),
+    p = shortestPath((metal_band)-[*..8]-(electro_art)) 
+    WHERE  metal_band.style contains 'metal' and electro_art.style contains 'electro'
+RETURN p limit 5
+```
 
 
-Metallica To Justice
+__Metallica To Dua Lipa__
 
-![example01](images/MetallicaJustice.png "Pioneers in Industrial Metal")
+![example01](images/metallica_duaLipa.png "")
 
 ```sql
 MATCH  (source:Band {name: 'Metallica'}), (target:Band {name: 'Justice'}),
